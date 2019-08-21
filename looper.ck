@@ -26,6 +26,7 @@ class Loop{
 
 	fun void setBars(int bars){
 		if(_started==0){
+			if(bars!=_bars) <<< "set bars to: ", bars >>>;
 			bars => _bars;
 		}
 	}
@@ -56,7 +57,6 @@ class Loop{
 			now => _start;
 		}
 
-		
 		1 => _status;
 		1 => loop.record;
 		
@@ -90,6 +90,7 @@ class Loop{
 
 	fun void setLength(dur barLen){
 		if(_loopLen==_zeroTime){
+			<<< "setting len" >>>;
 			barLen * _bars => _loopLen;
 			_loopLen => loop.loopEnd;
 			_loopLen => loop.loopEndRec;
@@ -124,7 +125,7 @@ if (me.args()) {
 
 MidiIn midiIn;
 MidiMsg msg;
-// also need to do midi out to send midi clock
+// also need to do midi out
 
 if (!midiIn.open(midiDevice)) {
   <<< "couldn't open midi device ", midiDevice >>>;
@@ -143,17 +144,37 @@ for (0 => int i; i < loopsCount; i++) {
   loops[i].init(inputGain,1);
 }
 
+/*
+fun void switchToPassthrough(){
+	0 => inputGain.gain;
+	1.0 => passThrough.gain;	
+}
+
+fun void switchToLooper(){
+	1.0 => inputGain.gain;
+	0 => passThrough.gain;
+}
+*/
+
 fun int getActiveLoops(){
 	0 => int active;
 	for (0 => int i; i < loopsCount; i++) {
-  		if(loops[i].status()>0){
+  		if(loops[i].started()>0){
   			active++;
   		}
 	}
 	return active;
 }
 
+fun void resetAll(){
+	for (0 => int i; i < loopsCount; i++) {
+		new Loop @=> loops[i];
+		loops[i].init(inputGain,1);
+	}
+}
+
 fun dur getbarLen(int firstLoop){
+	<<< "getting barlen" >>>;
 	loops[firstLoop] @=> Loop loop;
 	loop.duration()/loop.bars() => barLen; 
 	loop.setLength(barLen);
@@ -168,7 +189,7 @@ fun void processCurrent(){
 fun void pedal1(int loopNum, int data){
 	
 	if(data==127){
-		
+		//switchToLooper();
 		if(loopNum!=currentLoop) processCurrent();		
 		loops[loopNum] @=> Loop loop;
 		loop.status() => int status;
@@ -183,6 +204,7 @@ fun void pedal1(int loopNum, int data){
 		else if(status==2) loop.play();
 		else if(status==3) loop.overdub();
 		if(status==0){
+			<<< "barlen: ", barLen >>>;
 			if(barLen!=zeroTime) loop.setLength(barLen);
 			if(loop.started()==1) loop.play();
 			else loop.record();
@@ -201,7 +223,9 @@ fun void pedal2(int loopNum, int data){
 		if(data==0 && now - pedalStart >= hold){
 			loop.clear();
 			if(getActiveLoops()==0){
+				<<< "fresh start" >>>;
 				zeroTime => barLen;
+				resetAll();
 			}
 		}
 	}
@@ -213,18 +237,21 @@ fun void pedal2(int loopNum, int data){
 }
 
 fun void volume(int loopNum, int vol){
-	
+	vol => float fvol;
+	fvol/127 => float _vol;
+	loops[loopNum].volume(_vol);
 }
 
-fun void bars(int loopNum, int vol){
-	
+fun void bars(int loopNum, int bars){
+	bars/7 + 1 => int _bars;
+	loops[loopNum].setBars(_bars);
 }
 
+//switchToPassthrough();
 
 while (true) {
 	midiIn => now;
 	while (midiIn.recv(msg)) {
-		<<< msg.data1 , msg.data2, msg.data3 >>>;
 		if(msg.data2 >= pedal1Start && msg.data2 < pedal1Start + loopsCount){
 			//pedal 1
 			pedal1(msg.data2-pedal1Start,msg.data3);
@@ -245,4 +272,3 @@ while (true) {
 	}
 
 }
-
