@@ -1,6 +1,17 @@
 //global
 0::second => dur zeroTime;
 
+/*
+TODO:
+- see what using different voices for each overdub does
+- if that works - build in undo when in overdub mode
+- look at working out an offset for each track, so when we stop all we can stop play as well, and then they all start again at the same time.
+- build stop all, and play all buttons
+- expand to 12 tracks (or 8, and keep each looper to 4) and use a slider to fade between the two
+- create a method to allow a track to be in both 'decks'
+
+*/
+
 class Loop{
 	LiSa loop;
 	0::second => dur _zeroTime;
@@ -59,7 +70,7 @@ class Loop{
 
 		1 => _status;
 		1 => loop.record;
-		
+		1 => loop.loopRec;
 	}
 
 	fun void overdub(){
@@ -67,6 +78,7 @@ class Loop{
 		loop.playPos() => loop.recPos;
 		2 => _status;
 		1 => loop.record;
+		1 => loop.loopRec;
 	}
 
 	fun void play(){
@@ -74,12 +86,14 @@ class Loop{
 		(0, _volume) => loop.voiceGain;
 		3 => _status;
 		0 => loop.record;
+		0 => loop.loopRec;
 	}
 
 	fun void stop(){
-
+		<<< "stop" >>>;
 		0 => _status;
 		0 => loop.record;
+		0 => loop.loopRec;
 		(0, 0) => loop.voiceGain;
 	}
 
@@ -144,18 +158,6 @@ for (0 => int i; i < loopsCount; i++) {
   loops[i].init(inputGain,1);
 }
 
-/*
-fun void switchToPassthrough(){
-	0 => inputGain.gain;
-	1.0 => passThrough.gain;	
-}
-
-fun void switchToLooper(){
-	1.0 => inputGain.gain;
-	0 => passThrough.gain;
-}
-*/
-
 fun int getActiveLoops(){
 	0 => int active;
 	for (0 => int i; i < loopsCount; i++) {
@@ -189,7 +191,6 @@ fun void processCurrent(){
 fun void pedal1(int loopNum, int data){
 	
 	if(data==127){
-		//switchToLooper();
 		if(loopNum!=currentLoop) processCurrent();		
 		loops[loopNum] @=> Loop loop;
 		loop.status() => int status;
@@ -222,6 +223,10 @@ fun void pedal2(int loopNum, int data){
 		1::second => dur hold;
 		if(data==0 && now - pedalStart >= hold){
 			loop.clear();
+			loop.bars() => int bars;
+			new Loop @=> loops[loopNum];
+			loops[loopNum].init(inputGain,1);
+			loops[loopNum].setBars(bars);
 			if(getActiveLoops()==0){
 				<<< "fresh start" >>>;
 				zeroTime => barLen;
@@ -244,10 +249,9 @@ fun void volume(int loopNum, int vol){
 
 fun void bars(int loopNum, int bars){
 	bars/7 + 1 => int _bars;
+	//need to somehow link this to barlen so we never run out of sample space.
 	loops[loopNum].setBars(_bars);
 }
-
-//switchToPassthrough();
 
 while (true) {
 	midiIn => now;
@@ -257,7 +261,6 @@ while (true) {
 			pedal1(msg.data2-pedal1Start,msg.data3);
 		}
 		else if(msg.data2 >= pedal2Start && msg.data2 < pedal2Start + loopsCount){
-
 			//pedal 2
 			pedal2(msg.data2-pedal2Start,msg.data3);
 		}
@@ -272,3 +275,4 @@ while (true) {
 	}
 
 }
+
